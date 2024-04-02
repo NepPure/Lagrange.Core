@@ -1,5 +1,6 @@
 using Lagrange.Core.Common.Entity;
 using Lagrange.Core.Message;
+using Lagrange.OneBot.Utility;
 
 namespace Lagrange.OneBot.Database;
 
@@ -16,13 +17,18 @@ public class MessageRecord
     
     public ulong MessageId { get; set; }
     
-    public BotFriend? FriendInfo { get; internal set; }
+    public BotFriend? FriendInfo { get; set; }
     
-    public BotGroupMember? GroupMemberInfo { get; internal set; }
+    public BotGroupMember? GroupMemberInfo { get; set; }
 
     public List<IMessageEntity> Entities { get; set; } = [];
     
     public int MessageHash { get; set; }
+
+    static MessageRecord()
+    {
+        Vector2Mapper.RegisterType(); // I HATE THIS
+    }
 
     public static explicit operator MessageChain(MessageRecord record)
     {
@@ -51,9 +57,18 @@ public class MessageRecord
         MessageHash = CalcMessageHash(chain.MessageId, chain.Sequence)
     };
 
-    private static int CalcMessageHash(ulong msgId, uint seq)
+    public static int CalcMessageHash(ulong msgId, uint seq)
     {
         var messageId = BitConverter.GetBytes(msgId);
+        var sequence = BitConverter.GetBytes(seq);
+
+        byte[] id = [messageId[0], messageId[1], sequence[0], sequence[1]];
+        return BitConverter.ToInt32(id.AsSpan());
+    }
+    
+    public static int CalcMessageHash(uint random, uint seq)
+    {
+        var messageId = BitConverter.GetBytes(random);
         var sequence = BitConverter.GetBytes(seq);
 
         byte[] id = [messageId[0], messageId[1], sequence[0], sequence[1]];

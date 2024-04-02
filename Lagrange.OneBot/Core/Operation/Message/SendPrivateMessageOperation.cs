@@ -4,23 +4,31 @@ using Lagrange.Core;
 using Lagrange.Core.Common.Interface.Api;
 using Lagrange.OneBot.Core.Entity.Action;
 using Lagrange.OneBot.Core.Entity.Action.Response;
+using Lagrange.OneBot.Core.Operation.Converters;
+using Lagrange.OneBot.Database;
+using LiteDB;
 
 namespace Lagrange.OneBot.Core.Operation.Message;
 
 [Operation("send_private_msg")]
-public sealed class SendPrivateMessageOperation : IOperation
+public sealed class SendPrivateMessageOperation(MessageCommon common, LiteDatabase database) : IOperation
 {
-    public async Task<OneBotResult> HandleOperation(BotContext context, JsonObject? payload)
+    public async Task<OneBotResult> HandleOperation(BotContext context, JsonNode? payload)
     {
-        
-        var result = payload.Deserialize<OneBotPrivateMessageBase>() switch
+        var chain = payload.Deserialize<OneBotPrivateMessageBase>(SerializerOptions.DefaultOptions) switch
         {
-            OneBotPrivateMessage message => await context.SendMessage(MessageCommon.ParseChain(message).Build()),
-            OneBotPrivateMessageSimple messageSimple => await context.SendMessage(MessageCommon.ParseChain(messageSimple).Build()),
-            OneBotPrivateMessageText messageText => await context.SendMessage(MessageCommon.ParseChain(messageText).Build()),
+            OneBotPrivateMessage message => common.ParseChain(message).Build(),
+            OneBotPrivateMessageSimple messageSimple => common.ParseChain(messageSimple).Build(),
+            OneBotPrivateMessageText messageText => common.ParseChain(messageText).Build(),
             _ => throw new Exception()
         };
         
-        return new OneBotResult(new OneBotMessageResponse(0), 0, "ok");
+        var result = await context.SendMessage(chain);
+        int hash = MessageRecord.CalcMessageHash(chain.MessageId, result.Sequence ?? 0);
+        
+        chain.Sequence = result.Sequence ?? 0;
+        database.GetCollection<MessageRecord>().Insert(hash, (MessageRecord)chain);
+        
+        return new OneBotResult(new OneBotMessageResponse(hash), (int)result.Result, "ok");
     }
 }
